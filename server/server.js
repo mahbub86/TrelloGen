@@ -78,6 +78,22 @@ app.post('/api/columns', (req, res) => {
   });
 });
 
+app.put('/api/columns/:id', (req, res) => {
+  const { title } = req.body;
+  db.query('UPDATE columns SET title = ? WHERE id = ?', [title, req.params.id], (err) => {
+    if (err) return res.status(500).send(err);
+    res.sendStatus(200);
+  });
+});
+
+app.delete('/api/columns/:id', (req, res) => {
+  db.query('DELETE FROM columns WHERE id = ?', [req.params.id], (err) => {
+    if (err) return res.status(500).send(err);
+    res.sendStatus(200);
+  });
+});
+
+
 // --- Tasks ---
 app.get('/api/boards/:id/tasks', (req, res) => {
   const sql = `
