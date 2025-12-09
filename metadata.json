@@ -1,0 +1,5 @@
+{
+  "name": "TrelloGen - AI Project Manager",
+  "description": "A Kanban-style project management tool featuring drag-and-drop tasks, mock MySQL persistence (localStorage), and Gemini AI integration for smart task breakdown and content generation.",
+  "requestFramePermissions": []
+}
