@@ -65,7 +65,7 @@ const ListView: React.FC<ListViewProps> = ({ tasks, columns, users, onTaskClick,
                return (
                 <tr key={task.id} className="hover:bg-blue-50/50 transition-colors group">
                   {/* Title */}
-                  <td className="p-4 pl-6">
+                  <td className="py-2.5 px-4">
                     <div 
                         onClick={() => onTaskClick(task)}
                         className="font-bold text-gray-800 text-sm cursor-pointer hover:text-blue-600 flex items-center gap-3"
@@ -76,7 +76,7 @@ const ListView: React.FC<ListViewProps> = ({ tasks, columns, users, onTaskClick,
                   </td>
 
                   {/* Status Dropdown */}
-                  <td className="p-4">
+                  <td className="py-2.5 px-4">
                     <div className="relative">
                         <select 
                             value={task.columnId}
@@ -99,7 +99,7 @@ const ListView: React.FC<ListViewProps> = ({ tasks, columns, users, onTaskClick,
                   </td>
 
                   {/* Priority Dropdown */}
-                  <td className="p-4">
+                  <td className="py-2.5 px-4">
                     <div className="relative w-28">
                          <select 
                             value={task.priority}
@@ -120,7 +120,7 @@ const ListView: React.FC<ListViewProps> = ({ tasks, columns, users, onTaskClick,
                   </td>
 
                   {/* Assignees */}
-                  <td className="p-4">
+                  <td className="py-2.5 px-4">
                     <div className="flex -space-x-2">
                         {assignedUsers.length > 0 ? assignedUsers.map(user => (
                             user.avatarUrl ? (
@@ -128,10 +128,10 @@ const ListView: React.FC<ListViewProps> = ({ tasks, columns, users, onTaskClick,
                                     key={user.id} 
                                     src={user.avatarUrl} 
                                     title={user.name}
-                                    className="w-8 h-8 rounded-full border-2 border-white shadow-sm object-cover" 
+                                    className="w-7 h-7 rounded-full border-2 border-white shadow-sm object-cover" 
                                 />
                             ) : (
-                                <div key={user.id} className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 border-2 border-white flex items-center justify-center text-[10px] font-bold" title={user.name}>
+                                <div key={user.id} className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 border-2 border-white flex items-center justify-center text-[10px] font-bold" title={user.name}>
                                     {user.initials}
                                 </div>
                             )
@@ -142,7 +142,7 @@ const ListView: React.FC<ListViewProps> = ({ tasks, columns, users, onTaskClick,
                   </td>
 
                   {/* Date */}
-                  <td className="p-4">
+                  <td className="py-2.5 px-4">
                       <div className={`text-xs font-medium ${task.dueDate && Date.now() > task.dueDate ? 'text-red-500 font-bold' : 'text-gray-500'}`}>
                           {formatDate(task.dueDate)}
                       </div>
