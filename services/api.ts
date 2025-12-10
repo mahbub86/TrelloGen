@@ -1,4 +1,5 @@
 
+
 import { Board, Column, Task, User } from '../types';
 
 const API_BASE_URL = 'http://localhost:3001/api';
@@ -75,6 +76,13 @@ export const api = {
   getTasks: async (boardId: string): Promise<Task[]> => {
     const response = await fetch(`${API_BASE_URL}/boards/${boardId}/tasks`);
     if (!response.ok) throw new Error('Failed to fetch tasks');
+    return response.json();
+  },
+
+  // New Search Method
+  searchTasks: async (query: string): Promise<Task[]> => {
+    const response = await fetch(`${API_BASE_URL}/search?q=${encodeURIComponent(query)}`);
+    if (!response.ok) throw new Error('Failed to search tasks');
     return response.json();
   },
 

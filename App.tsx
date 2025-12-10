@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 // Switch to API service for MySQL connection
 import { api as mockDB } from './services/api';
@@ -38,9 +39,18 @@ const App: React.FC = () => {
   
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
-  const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Task[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Navigation to Task State
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+
   // Board Menu State
   const [isBoardMenuOpen, setIsBoardMenuOpen] = useState(false);
   const boardMenuRef = useRef<HTMLDivElement>(null);
@@ -116,6 +126,66 @@ const App: React.FC = () => {
     };
   }, [isBoardMenuOpen]);
 
+  // Handle Search Input
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const query = e.target.value;
+      setSearchQuery(query);
+      
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      
+      if (query.trim().length > 1) {
+          setIsSearching(true);
+          setShowSearchResults(true);
+          searchTimeoutRef.current = setTimeout(async () => {
+              try {
+                  const results = await mockDB.searchTasks(query);
+                  setSearchResults(results);
+              } catch (e) {
+                  console.error("Search failed", e);
+              } finally {
+                  setIsSearching(false);
+              }
+          }, 300);
+      } else {
+          setSearchResults([]);
+          setShowSearchResults(false);
+      }
+  };
+
+  const handleSearchResultClick = (task: Task) => {
+      setShowSearchResults(false);
+      setSearchQuery('');
+      
+      // If task is on current board, just open it
+      if (currentBoard && task.boardId === currentBoard.id) {
+          const loadedTask = tasks.find(t => t.id === task.id);
+          if (loadedTask) {
+              setSelectedTask(loadedTask);
+              setIsModalOpen(true);
+          }
+      } else if (task.boardId) {
+          // Switch board then open task
+          const targetBoard = boards.find(b => b.id === task.boardId);
+          if (targetBoard) {
+              setPendingTaskId(task.id);
+              handleSwitchBoard(targetBoard);
+          }
+      }
+  };
+
+  // Effect to open pending task after board switch
+  useEffect(() => {
+      if (pendingTaskId && tasks.length > 0 && !isBoardLoading) {
+          const target = tasks.find(t => t.id === pendingTaskId);
+          if (target) {
+              setSelectedTask(target);
+              setIsModalOpen(true);
+              setPendingTaskId(null);
+          }
+      }
+  }, [tasks, pendingTaskId, isBoardLoading]);
+
+
   // Fetch Boards and Users when user logs in
   useEffect(() => {
     if (!user) {
@@ -157,8 +227,7 @@ const App: React.FC = () => {
     let timeoutId: NodeJS.Timeout;
     
     setBoardTitleInput(currentBoard.title);
-    setSearchQuery(''); // Clear search when switching boards
-
+    
     const fetchBoardDetails = async () => {
       // Ensure loading is true when we start
       setIsBoardLoading(true);
@@ -635,16 +704,52 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-             {/* Responsive Search */}
+             {/* Global Search */}
              <div className="relative group">
                <input 
                  type="text" 
-                 placeholder="Search tasks..." 
+                 placeholder="Search all tasks..." 
                  value={searchQuery}
-                 onChange={(e) => setSearchQuery(e.target.value)}
+                 onChange={handleSearchChange}
+                 onFocus={() => { if(searchQuery.length > 1) setShowSearchResults(true); }}
                  className="pl-8 sm:pl-9 pr-4 py-1.5 rounded-full bg-white/10 border border-white/10 focus:bg-white/20 text-sm text-white placeholder-white/60 outline-none w-28 focus:w-48 sm:w-48 sm:focus:w-64 transition-all duration-300 backdrop-blur-md shadow-inner" 
                />
-               <i className="fas fa-search absolute left-2.5 sm:left-3 top-2 text-white/60 group-focus-within:text-white transition-colors"></i>
+               <i className={`fas ${isSearching ? 'fa-spinner fa-spin' : 'fa-search'} absolute left-2.5 sm:left-3 top-2 text-white/60 group-focus-within:text-white transition-colors`}></i>
+               
+               {/* Search Results Dropdown */}
+               {showSearchResults && (
+                   <>
+                       <div className="fixed inset-0 z-40" onClick={() => setShowSearchResults(false)}></div>
+                       <div className="absolute top-full right-0 mt-2 w-72 sm:w-80 bg-white rounded-xl shadow-2xl border border-gray-100 max-h-80 overflow-y-auto z-50 animate-scaleIn origin-top-right">
+                           {isSearching ? (
+                               <div className="p-4 text-center text-gray-400 text-sm">Searching...</div>
+                           ) : searchResults.length > 0 ? (
+                               <div className="py-2">
+                                   <div className="px-4 py-1 text-xs font-bold text-gray-400 uppercase tracking-wider">Results ({searchResults.length})</div>
+                                   {searchResults.map(task => (
+                                       <button 
+                                           key={task.id}
+                                           onClick={() => handleSearchResultClick(task)}
+                                           className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0 group/item"
+                                       >
+                                           <div className="font-bold text-sm text-gray-800 group-hover/item:text-blue-700 truncate">{task.title}</div>
+                                           <div className="flex justify-between items-center mt-1">
+                                                <span className="text-xs text-gray-500 truncate max-w-[150px]">{task.boardTitle || 'Unknown Board'}</span>
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded border uppercase font-bold ${task.priority === 'high' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                                                    {task.priority}
+                                                </span>
+                                           </div>
+                                       </button>
+                                   ))}
+                               </div>
+                           ) : (
+                               <div className="p-4 text-center text-gray-400 text-sm">
+                                   No tasks found for "{searchQuery}"
+                               </div>
+                           )}
+                       </div>
+                   </>
+               )}
              </div>
              
              <div className="h-8 w-[1px] bg-white/10 hidden sm:block"></div>
@@ -741,13 +846,7 @@ const App: React.FC = () => {
                   <ColumnComponent
                     key={col.id}
                     column={col}
-                    tasks={tasks.filter(t => 
-                      t.columnId === col.id && (
-                        !searchQuery || 
-                        t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                        (t.description && t.description.toLowerCase().includes(searchQuery.toLowerCase()))
-                      )
-                    )}
+                    tasks={tasks.filter(t => t.columnId === col.id)}
                     users={allUsers}
                     onTaskDrop={handleTaskDrop}
                     onTaskClick={handleTaskClick}

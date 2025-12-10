@@ -151,6 +151,43 @@ app.get('/api/boards/:id/tasks', (req, res) => {
   });
 });
 
+// Search Endpoint
+app.get('/api/search', (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.json([]);
+  
+  const searchTerm = `%${q}%`;
+  const sql = `
+    SELECT t.*, c.board_id, b.title as board_title 
+    FROM tasks t
+    JOIN columns c ON t.column_id = c.id
+    JOIN boards b ON c.board_id = b.id
+    WHERE t.title LIKE ? OR t.description LIKE ?
+    LIMIT 20
+  `;
+  
+  db.query(sql, [searchTerm, searchTerm], (err, results) => {
+    if (err) return res.status(500).send(err);
+    
+    const formatted = results.map(t => ({
+        id: t.id,
+        columnId: t.column_id,
+        boardId: t.board_id,
+        boardTitle: t.board_title,
+        title: t.title,
+        description: t.description,
+        priority: t.priority,
+        subtasks: typeof t.subtasks === 'string' ? JSON.parse(t.subtasks || '[]') : t.subtasks,
+        comments: typeof t.comments === 'string' ? JSON.parse(t.comments || '[]') : t.comments,
+        assigneeIds: typeof t.assignee_ids === 'string' ? JSON.parse(t.assignee_ids || '[]') : t.assignee_ids,
+        startDate: t.start_date,
+        dueDate: t.due_date,
+        createdAt: t.created_at
+    }));
+    res.json(formatted);
+  });
+});
+
 app.post('/api/tasks', (req, res) => {
   const t = req.body;
   const sql = `INSERT INTO tasks (id, column_id, title, description, priority, subtasks, comments, assignee_ids, start_date, due_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;

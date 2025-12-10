@@ -25,6 +25,10 @@ export interface Task {
   startDate?: number;
   dueDate?: number;
   createdAt: number;
+  
+  // Optional fields for Search Results context
+  boardId?: string;
+  boardTitle?: string;
 }
 
 export interface Column {
