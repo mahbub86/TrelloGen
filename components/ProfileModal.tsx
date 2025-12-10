@@ -11,20 +11,72 @@ interface ProfileModalProps {
 
 const ProfileModal: React.FC<ProfileModalProps> = ({ user, isOpen, onClose, onSave }) => {
   const [name, setName] = useState(user.name);
-  const [password, setPassword] = useState(user.passwordHash); // Pre-fill with current (mock) hash for simplicity, or keep empty
+  const [password, setPassword] = useState(user.passwordHash);
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || '');
+  const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Helper to resize and compress image
+  const resizeImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          // Resize to 150x150 for optimal avatar usage
+          const MAX_WIDTH = 150; 
+          const MAX_HEIGHT = 150; 
+          let width = img.width;
+          let height = img.height;
+
+          // Maintain aspect ratio
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+             ctx.drawImage(img, 0, 0, width, height);
+             // Compress to JPEG at 60% quality to keep string size small
+             resolve(canvas.toDataURL('image/jpeg', 0.6)); 
+          } else {
+             reject(new Error("Canvas context failed"));
+          }
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      setIsProcessing(true);
+      try {
+        const resizedBase64 = await resizeImage(file);
+        setAvatarUrl(resizedBase64);
+      } catch (err) {
+        console.error("Image processing failed", err);
+        alert("Failed to process image. Please try another.");
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -59,10 +111,12 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ user, isOpen, onClose, onSa
           
           {/* Avatar - Negative Margin to pull up */}
           <div className="relative -mt-12 mb-6 flex justify-center">
-            <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-              <div className="w-24 h-24 rounded-full border-4 border-white shadow-lg overflow-hidden bg-gray-100 flex items-center justify-center text-2xl font-bold text-gray-400">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+            <div className={`relative group cursor-pointer transition-opacity ${isProcessing ? 'opacity-50' : 'opacity-100'}`} onClick={() => !isProcessing && fileInputRef.current?.click()}>
+              <div className="w-24 h-24 rounded-full border-4 border-white shadow-lg overflow-hidden bg-gray-100 flex items-center justify-center text-2xl font-bold text-gray-400 relative">
+                {isProcessing ? (
+                   <i className="fas fa-spinner fa-spin text-blue-500"></i>
+                ) : avatarUrl ? (
+                  <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover object-center" />
                 ) : (
                   user.initials
                 )}
@@ -142,7 +196,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ user, isOpen, onClose, onSa
               </button>
               <button
                 type="submit"
-                className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/30 hover:scale-[1.02] text-sm"
+                disabled={isProcessing}
+                className={`flex-1 px-4 py-2.5 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/30 hover:scale-[1.02] text-sm ${isProcessing ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
                 Save Changes
               </button>

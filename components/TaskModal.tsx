@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Task, Subtask, User } from '../types';
 import { geminiService } from '../services/geminiService';
 
@@ -18,6 +18,9 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
   const [isGeneratingSub, setIsGeneratingSub] = useState(false);
   const [isAssigneeOpen, setIsAssigneeOpen] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  
+  // Ref for the assignee dropdown to detect clicks outside
+  const assigneeDropdownRef = useRef<HTMLDivElement>(null);
 
   // Reset state when modal opens or task changes
   useEffect(() => {
@@ -29,6 +32,22 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
       setIsGeneratingSub(false);
     }
   }, [task, isOpen]);
+
+  // Handle click outside assignee dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (assigneeDropdownRef.current && !assigneeDropdownRef.current.contains(event.target as Node)) {
+        setIsAssigneeOpen(false);
+      }
+    };
+
+    if (isAssigneeOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isAssigneeOpen]);
 
   if (!isOpen) return null;
 
@@ -171,7 +190,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
               </div>
 
               {/* Assignees Section */}
-              <div className="relative">
+              <div className="relative" ref={assigneeDropdownRef}>
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
                   <i className="fas fa-users mr-2 text-gray-400"></i> Members
                 </h3>
@@ -368,10 +387,8 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
         <div className="p-5 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
           <button 
                  onClick={() => {
-                   if(window.confirm('Are you sure you want to delete this task?')) {
-                     onDelete(task.id);
-                     onClose();
-                   }
+                   onDelete(task.id);
+                   onClose();
                  }}
                  className="text-red-500 hover:text-red-700 text-sm font-medium px-2 py-1 hover:bg-red-50 rounded transition-colors"
           >

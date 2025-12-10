@@ -1,13 +1,24 @@
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 // Switch to API service for MySQL connection
 import { api as mockDB } from './services/api';
 import { Board, Column, Task, User } from './types';
 import ColumnComponent from './components/Column';
 import TaskModal from './components/TaskModal';
 import ProfileModal from './components/ProfileModal';
+import ConfirmModal from './components/ConfirmModal';
+import BoardDeleteModal from './components/BoardDeleteModal';
 import AuthPage from './components/AuthPage';
 import Sidebar from './components/Sidebar';
+
+const LOADING_TIPS = [
+  "Preparing your workspace...",
+  "Syncing with the cloud...",
+  "Optimizing your workflow...",
+  "Loading AI models...",
+  "Organizing tasks..."
+];
 
 const App: React.FC = () => {
   // Auth State
@@ -20,13 +31,32 @@ const App: React.FC = () => {
   
   const [columns, setColumns] = useState<Column[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Loading States
+  const [loading, setLoading] = useState(true); // Initial App Load
+  const [isBoardLoading, setIsBoardLoading] = useState(false); // Switching Boards
+  const [currentTip, setCurrentTip] = useState(0); // Loading text rotation
   
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
+  // Board Menu State
+  const [isBoardMenuOpen, setIsBoardMenuOpen] = useState(false);
+  const boardMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
+  // Board Deletion Modal State
+  const [isDeleteBoardModalOpen, setIsDeleteBoardModalOpen] = useState(false);
+
   // Board Title Editing State
   const [isEditingBoardTitle, setIsEditingBoardTitle] = useState(false);
   const [boardTitleInput, setBoardTitleInput] = useState('');
@@ -62,6 +92,31 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Tip Rotation Effect
+  useEffect(() => {
+    if (loading) {
+      const interval = setInterval(() => {
+        setCurrentTip((prev) => (prev + 1) % LOADING_TIPS.length);
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [loading]);
+
+  // Click Outside Handler for Board Menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (boardMenuRef.current && !boardMenuRef.current.contains(event.target as Node)) {
+        setIsBoardMenuOpen(false);
+      }
+    };
+    if (isBoardMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isBoardMenuOpen]);
+
   // Fetch Boards and Users when user logs in
   useEffect(() => {
     if (!user) {
@@ -85,7 +140,8 @@ const App: React.FC = () => {
       } catch (e) {
         console.error("Failed to load initial data", e);
       } finally {
-        setLoading(false);
+        // Minimum loading time for aesthetic purposes
+        setTimeout(() => setLoading(false), 1500);
       }
     };
     fetchData();
@@ -98,6 +154,7 @@ const App: React.FC = () => {
     setSearchQuery(''); // Clear search when switching boards
 
     const fetchBoardDetails = async () => {
+      setIsBoardLoading(true);
       try {
         const cols = await mockDB.getColumns(currentBoard.id);
         setColumns(cols);
@@ -105,6 +162,9 @@ const App: React.FC = () => {
         setTasks(tasksData);
       } catch (e) {
         console.error("Failed to load board details", e);
+      } finally {
+        // Add slight delay to prevent flicker on fast connections
+        setTimeout(() => setIsBoardLoading(false), 300);
       }
     };
     fetchBoardDetails();
@@ -113,6 +173,15 @@ const App: React.FC = () => {
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const openConfirmModal = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({
+        isOpen: true,
+        title,
+        message,
+        onConfirm
+    });
   };
 
   const handleCreateBoard = async (title: string, background: string) => {
@@ -146,6 +215,30 @@ const App: React.FC = () => {
         console.error("Failed to update board title", e);
         showToast("Failed to rename board", "error");
     }
+  };
+
+  const executeDeleteBoard = async () => {
+      if (!currentBoard) return;
+      const boardIdToDelete = currentBoard.id;
+      
+      try {
+          await mockDB.deleteBoard(boardIdToDelete);
+          
+          const updatedBoards = boards.filter(b => b.id !== boardIdToDelete);
+          setBoards(updatedBoards);
+          
+          if (updatedBoards.length > 0) {
+              setCurrentBoard(updatedBoards[0]);
+          } else {
+              setCurrentBoard(null);
+          }
+          
+          showToast("Board deleted successfully");
+          setIsDeleteBoardModalOpen(false);
+      } catch (e) {
+          console.error("Failed to delete board", e);
+          showToast("Failed to delete board", "error");
+      }
   };
 
   const handleLoginSuccess = (loggedInUser: User) => {
@@ -222,7 +315,7 @@ const App: React.FC = () => {
     showToast("Task updated");
   };
 
-  const handleDeleteTask = async (taskId: string) => {
+  const executeDeleteTask = async (taskId: string) => {
     // Optimistic Delete
     setTasks(prev => prev.filter(t => t.id !== taskId));
     try {
@@ -232,6 +325,14 @@ const App: React.FC = () => {
       console.error("Failed to delete task", e);
       showToast("Failed to delete task", "error");
     }
+  };
+
+  const promptDeleteTask = (taskId: string) => {
+      openConfirmModal(
+          "Delete Task", 
+          "Are you sure you want to delete this card? This action cannot be undone.", 
+          () => executeDeleteTask(taskId)
+      );
   };
 
   const handleAddTask = async (columnId: string, title: string) => {
@@ -291,16 +392,20 @@ const App: React.FC = () => {
           return;
       }
 
-      if (!window.confirm("Are you sure you want to delete this list?")) return;
-
-      setColumns(prev => prev.filter(c => c.id !== columnId));
-      try {
-          await mockDB.deleteColumn(columnId);
-          showToast("List deleted successfully");
-      } catch (e) {
-          console.error("Failed to delete column", e);
-          showToast("Failed to delete list", "error");
-      }
+      openConfirmModal(
+          "Delete List",
+          "Are you sure you want to delete this list?",
+          async () => {
+              setColumns(prev => prev.filter(c => c.id !== columnId));
+              try {
+                  await mockDB.deleteColumn(columnId);
+                  showToast("List deleted successfully");
+              } catch (e) {
+                  console.error("Failed to delete column", e);
+                  showToast("Failed to delete list", "error");
+              }
+          }
+      );
   };
 
   // 1. Auth Guard
@@ -308,13 +413,35 @@ const App: React.FC = () => {
     return <AuthPage onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // 2. Loading State
+  // 2. Initial App Loading State (ClickUp Style)
   if (loading) {
     return (
-      <div className="h-screen w-full flex items-center justify-center text-white/80">
-        <div className="flex flex-col items-center gap-4">
-           <i className="fas fa-circle-notch fa-spin text-4xl animate-pulse"></i>
-           <span className="text-sm font-medium tracking-widest uppercase">Loading Workspace...</span>
+      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-gray-900 text-white">
+        {/* Animated Background Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-tr from-gray-900 via-gray-800 to-black opacity-90"></div>
+        
+        {/* Logo Container with Pulse */}
+        <div className="relative z-10 mb-8">
+            <div className="w-24 h-24 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/20 animate-float">
+               <i className="fas fa-columns text-5xl text-white drop-shadow-md"></i>
+            </div>
+            {/* Ripples */}
+            <div className="absolute inset-0 bg-blue-500/30 rounded-3xl animate-ping opacity-20"></div>
+        </div>
+
+        {/* Brand Name */}
+        <h1 className="relative z-10 text-3xl font-bold tracking-tight mb-2 animate-fadeIn">TrelloGen</h1>
+        
+        {/* Rotating Loading Tips */}
+        <div className="relative z-10 h-6 mb-8 overflow-hidden">
+           <p key={currentTip} className="text-gray-400 text-sm font-medium animate-slideUp">
+              {LOADING_TIPS[currentTip]}
+           </p>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="relative z-10 w-64 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+           <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 animate-shimmer w-[200%]"></div>
         </div>
       </div>
     );
@@ -332,6 +459,26 @@ const App: React.FC = () => {
            {toast.message}
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal 
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={() => {
+            confirmModal.onConfirm();
+            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Board Deletion Modal */}
+      <BoardDeleteModal 
+        isOpen={isDeleteBoardModalOpen}
+        boardTitle={currentBoard?.title || ''}
+        onClose={() => setIsDeleteBoardModalOpen(false)}
+        onConfirm={executeDeleteBoard}
+      />
 
       {/* Sidebar */}
       <Sidebar 
@@ -405,6 +552,41 @@ const App: React.FC = () => {
                     )}
                     
                     <span className="px-2 py-0.5 bg-white/10 rounded text-[10px] font-medium border border-white/10 uppercase tracking-wider backdrop-blur-sm select-none">Board</span>
+                    
+                    {/* Board Actions Menu */}
+                    <div className="relative ml-2" ref={boardMenuRef}>
+                        <button 
+                            onClick={() => setIsBoardMenuOpen(!isBoardMenuOpen)}
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isBoardMenuOpen ? 'bg-white text-gray-800' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
+                        >
+                            <i className="fas fa-ellipsis-h"></i>
+                        </button>
+                        
+                        {isBoardMenuOpen && (
+                            <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 animate-scaleIn origin-top-left z-50 overflow-hidden">
+                                <div className="py-1">
+                                    <button 
+                                        onClick={() => {
+                                            setIsEditingBoardTitle(true);
+                                            setIsBoardMenuOpen(false);
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+                                    >
+                                        <i className="fas fa-pencil-alt w-4 text-center"></i> Rename Board
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            setIsDeleteBoardModalOpen(true);
+                                            setIsBoardMenuOpen(false);
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-3 border-t border-gray-100 mt-1 pt-2"
+                                    >
+                                        <i className="fas fa-trash-alt w-4 text-center"></i> Delete Board
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
           </div>
@@ -483,67 +665,101 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent z-10">
           <div className="h-full flex items-start gap-6 p-4 sm:p-6 min-w-max">
             
-            {columns.map(col => (
-              <ColumnComponent
-                key={col.id}
-                column={col}
-                tasks={tasks.filter(t => 
-                   t.columnId === col.id && (
-                     !searchQuery || 
-                     t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                     (t.description && t.description.toLowerCase().includes(searchQuery.toLowerCase()))
-                   )
-                )}
-                users={allUsers}
-                onTaskDrop={handleTaskDrop}
-                onTaskClick={handleTaskClick}
-                onAddTask={handleAddTask}
-                onDeleteTask={handleDeleteTask}
-                onUpdateColumn={handleUpdateColumn}
-                onDeleteColumn={handleDeleteColumn}
-              />
-            ))}
+            {isBoardLoading ? (
+               // Loading Skeleton
+               Array.from({ length: 3 }).map((_, i) => (
+                 <div key={i} className="flex-shrink-0 w-80 flex flex-col h-full animate-fadeIn" style={{ animationDelay: `${i * 100}ms` }}>
+                    <div className="bg-[#ebecf0]/80 backdrop-blur-md rounded-2xl flex flex-col h-full shadow-lg border border-white/40 p-3">
+                        {/* Header Skeleton */}
+                        <div className="p-2 mb-2 flex items-center justify-between">
+                            <div className="h-5 bg-gray-300/50 rounded w-1/2 animate-pulse"></div>
+                            <div className="h-5 w-8 bg-gray-300/50 rounded-full animate-pulse"></div>
+                        </div>
+                        {/* Cards Skeleton */}
+                        <div className="flex-1 space-y-3 p-1">
+                            {[1, 2, 3].map(k => (
+                                <div key={k} className="h-28 bg-white/60 rounded-xl shadow-sm border border-white/50 relative overflow-hidden group">
+                                     {/* Shimmer overlay */}
+                                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-shimmer" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                 </div>
+               ))
+            ) : currentBoard ? (
+                // Actual Columns
+                columns.map(col => (
+                  <ColumnComponent
+                    key={col.id}
+                    column={col}
+                    tasks={tasks.filter(t => 
+                      t.columnId === col.id && (
+                        !searchQuery || 
+                        t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                        (t.description && t.description.toLowerCase().includes(searchQuery.toLowerCase()))
+                      )
+                    )}
+                    users={allUsers}
+                    onTaskDrop={handleTaskDrop}
+                    onTaskClick={handleTaskClick}
+                    onAddTask={handleAddTask}
+                    onDeleteTask={promptDeleteTask}
+                    onUpdateColumn={handleUpdateColumn}
+                    onDeleteColumn={handleDeleteColumn}
+                  />
+                ))
+            ) : (
+                <div className="flex-1 flex items-center justify-center text-white/50">
+                    <div className="text-center">
+                        <i className="fas fa-folder-open text-4xl mb-4 opacity-50"></i>
+                        <p className="text-lg">No board selected. Create one to get started.</p>
+                    </div>
+                </div>
+            )}
 
             {/* Add Column Section - Always Visible at End */}
-            <div className="w-80 flex-shrink-0 pt-1">
-              {!isAddingColumn ? (
-                <button 
-                  onClick={() => setIsAddingColumn(true)}
-                  className="w-full h-12 bg-white/10 hover:bg-white/20 rounded-xl text-white font-medium text-left px-4 flex items-center transition-all duration-200 backdrop-blur-md border border-white/10 shadow-sm hover:shadow-md group"
-                >
-                  <span className="w-6 h-6 rounded bg-white/20 flex items-center justify-center mr-3 group-hover:bg-white/30 transition-colors">
-                      <i className="fas fa-plus text-xs"></i>
-                  </span>
-                  Add another list
-                </button>
-              ) : (
-                <div className="glass-card rounded-xl p-3 flex flex-col gap-2 shadow-xl animate-scaleIn">
-                  <input 
-                    autoFocus
-                    type="text"
-                    placeholder="Enter list title..."
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-800 bg-white/50 backdrop-blur-sm"
-                    value={newColumnTitle}
-                    onChange={e => setNewColumnTitle(e.target.value)}
-                    onKeyDown={e => { if(e.key === 'Enter') handleAddColumn(); }}
-                  />
-                  <div className="flex gap-2 items-center mt-1">
-                      <button 
-                          onClick={handleAddColumn}
-                          className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition shadow-md shadow-blue-500/30"
-                      >
-                          Add list
-                      </button>
-                       <button 
-                          onClick={() => { setIsAddingColumn(false); setNewColumnTitle(''); }}
-                          className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-lg transition"
-                      >
-                          <i className="fas fa-times"></i>
-                      </button>
-                  </div>
+            {currentBoard && (
+                <div className="w-80 flex-shrink-0 pt-1">
+                {!isAddingColumn ? (
+                    <button 
+                    onClick={() => setIsAddingColumn(true)}
+                    className="w-full h-12 bg-white/10 hover:bg-white/20 rounded-xl text-white font-medium text-left px-4 flex items-center transition-all duration-200 backdrop-blur-md border border-white/10 shadow-sm hover:shadow-md group"
+                    >
+                    <span className="w-6 h-6 rounded bg-white/20 flex items-center justify-center mr-3 group-hover:bg-white/30 transition-colors">
+                        <i className="fas fa-plus text-xs"></i>
+                    </span>
+                    Add another list
+                    </button>
+                ) : (
+                    <div className="glass-card rounded-xl p-3 flex flex-col gap-2 shadow-xl animate-scaleIn">
+                    <input 
+                        autoFocus
+                        type="text"
+                        placeholder="Enter list title..."
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-800 bg-white/50 backdrop-blur-sm"
+                        value={newColumnTitle}
+                        onChange={e => setNewColumnTitle(e.target.value)}
+                        onKeyDown={e => { if(e.key === 'Enter') handleAddColumn(); }}
+                    />
+                    <div className="flex gap-2 items-center mt-1">
+                        <button 
+                            onClick={handleAddColumn}
+                            className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition shadow-md shadow-blue-500/30"
+                        >
+                            Add list
+                        </button>
+                        <button 
+                            onClick={() => { setIsAddingColumn(false); setNewColumnTitle(''); }}
+                            className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-lg transition"
+                        >
+                            <i className="fas fa-times"></i>
+                        </button>
+                    </div>
+                    </div>
+                )}
                 </div>
-              )}
-            </div>
+            )}
             
             {/* Spacer to ensure the last item isn't flush with viewport edge when scrolled */}
             <div className="w-2 flex-shrink-0 h-1"></div>
@@ -558,7 +774,7 @@ const App: React.FC = () => {
             allUsers={allUsers}
             onClose={() => setIsModalOpen(false)}
             onSave={handleSaveTask}
-            onDelete={handleDeleteTask}
+            onDelete={promptDeleteTask}
           />
         )}
         

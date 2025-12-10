@@ -33,6 +33,13 @@ export const api = {
     if (!response.ok) throw new Error('Failed to update board');
   },
 
+  deleteBoard: async (boardId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/boards/${boardId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete board');
+  },
+
   getColumns: async (boardId: string): Promise<Column[]> => {
     const response = await fetch(`${API_BASE_URL}/boards/${boardId}/columns`);
     if (!response.ok) throw new Error('Failed to fetch columns');

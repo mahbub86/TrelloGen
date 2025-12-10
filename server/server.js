@@ -1,11 +1,16 @@
 import express from 'express';
 import mysql from 'mysql2';
 import cors from 'cors';
-import bodyParser from 'body-parser';
 
 const app = express();
 app.use(cors());
-app.use(bodyParser.json({ limit: '50mb' }));
+app.use(express.json({ limit: '50mb' }));
+
+// Request Logger
+app.use((req, res, next) => {
+  console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
+  next();
+});
 
 // ---------------------------------------------------------
 // DATABASE CONNECTION
@@ -39,16 +44,41 @@ app.get('/api/boards', (req, res) => {
 
 app.post('/api/boards', (req, res) => {
   const { id, title, background } = req.body;
+  
+  // 1. Create Board
   db.query('INSERT INTO boards (id, title, background) VALUES (?, ?, ?)', 
     [id, title, background], (err) => {
     if (err) return res.status(500).send(err);
-    res.json({ id, title, background });
+
+    // 2. Create Default Columns (TO DO, IN PROGRESS, COMPLETE)
+    const defaultCols = ['TO DO', 'IN PROGRESS', 'COMPLETE'];
+    const values = defaultCols.map((colTitle, index) => [
+      `col-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`, // unique ID
+      id,        // board_id
+      colTitle,  // title
+      index      // col_order
+    ]);
+
+    db.query('INSERT INTO columns (id, board_id, title, col_order) VALUES ?', [values], (err) => {
+      if (err) {
+        console.error("Failed to create default columns", err);
+      }
+      res.json({ id, title, background });
+    });
   });
 });
 
 app.put('/api/boards/:id', (req, res) => {
   const { title } = req.body;
   db.query('UPDATE boards SET title = ? WHERE id = ?', [title, req.params.id], (err) => {
+    if (err) return res.status(500).send(err);
+    res.sendStatus(200);
+  });
+});
+
+app.delete('/api/boards/:id', (req, res) => {
+  console.log(`Deleting board ${req.params.id}`);
+  db.query('DELETE FROM boards WHERE id = ?', [req.params.id], (err) => {
     if (err) return res.status(500).send(err);
     res.sendStatus(200);
   });
@@ -79,6 +109,7 @@ app.post('/api/columns', (req, res) => {
 
 app.put('/api/columns/:id', (req, res) => {
   const { title } = req.body;
+  console.log(`Updating column ${req.params.id} to "${title}"`);
   db.query('UPDATE columns SET title = ? WHERE id = ?', [title, req.params.id], (err) => {
     if (err) return res.status(500).send(err);
     res.sendStatus(200);
@@ -86,6 +117,7 @@ app.put('/api/columns/:id', (req, res) => {
 });
 
 app.delete('/api/columns/:id', (req, res) => {
+  console.log(`Deleting column ${req.params.id}`);
   db.query('DELETE FROM columns WHERE id = ?', [req.params.id], (err) => {
     if (err) return res.status(500).send(err);
     res.sendStatus(200);

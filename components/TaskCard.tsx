@@ -12,6 +12,32 @@ interface TaskCardProps {
   onDelete: (taskId: string) => void;
 }
 
+// Internal Avatar Component to handle image errors independently
+const Avatar = ({ user }: { user: User }) => {
+  const [imgError, setImgError] = useState(false);
+
+  if (user.avatarUrl && !imgError) {
+    return (
+      <img 
+        src={user.avatarUrl}
+        alt={user.name}
+        title={user.name}
+        onError={() => setImgError(true)}
+        className="w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-black/5 object-cover transform hover:scale-110 transition-transform z-0 hover:z-10 flex-shrink-0"
+      />
+    );
+  }
+
+  return (
+    <div 
+      title={user.name}
+      className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 flex items-center justify-center text-[9px] font-bold border-2 border-white shadow-sm ring-1 ring-black/5 transform hover:scale-110 transition-transform z-0 hover:z-10 flex-shrink-0"
+    >
+      {user.initials}
+    </div>
+  );
+};
+
 const TaskCard: React.FC<TaskCardProps> = ({ task, index, users, onDragStart, onDrop, onClick, onDelete }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   
@@ -20,9 +46,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, index, users, onDragStart, on
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this task?')) {
-      onDelete(task.id);
-    }
+    onDelete(task.id);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -133,30 +157,9 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, index, users, onDragStart, on
         
         {/* Avatars */}
         <div className="flex -space-x-2">
-          {assignedUsers.length > 0 ? (
-            assignedUsers.map(user => (
-               user.avatarUrl ? (
-                 <img 
-                   key={user.id}
-                   src={user.avatarUrl}
-                   alt={user.name}
-                   title={user.name}
-                   className="w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-black/5 object-cover transform hover:scale-110 transition-transform z-0 hover:z-10 flex-shrink-0"
-                 />
-               ) : (
-                 <div 
-                   key={user.id} 
-                   title={user.name}
-                   className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 flex items-center justify-center text-[9px] font-bold border-2 border-white shadow-sm ring-1 ring-black/5 transform hover:scale-110 transition-transform z-0 hover:z-10 flex-shrink-0"
-                 >
-                   {user.initials}
-                 </div>
-               )
-            ))
-          ) : (
-            // Empty state placeholder if needed
-            null
-          )}
+          {assignedUsers.length > 0 && assignedUsers.map(user => (
+              <Avatar key={user.id} user={user} />
+          ))}
         </div>
       </div>
     </div>
