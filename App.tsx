@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 // Switch to API service for MySQL connection
 import { api as mockDB } from './services/api';
@@ -135,6 +133,8 @@ const App: React.FC = () => {
         setAllUsers(usersData);
         
         if (boardsData.length > 0) {
+          // Pre-set loading to avoid flash of empty board on initial load
+          setIsBoardLoading(true);
           setCurrentBoard(boardsData[0]);
         }
       } catch (e) {
@@ -150,24 +150,54 @@ const App: React.FC = () => {
   // Fetch Board Details (Columns/Tasks) when currentBoard changes
   useEffect(() => {
     if (!currentBoard) return;
+    
+    // Setup for this board load
+    let isActive = true;
+    let timeoutId: NodeJS.Timeout;
+    
     setBoardTitleInput(currentBoard.title);
     setSearchQuery(''); // Clear search when switching boards
 
     const fetchBoardDetails = async () => {
+      // Ensure loading is true when we start
       setIsBoardLoading(true);
+      
+      // Clear previous data immediately to prevent "stacking" or flashing old data
+      setColumns([]);
+      setTasks([]);
+      
+      // Artificial delay promise (800ms) to ensure loader is CLEARLY visible
+      const minLoadTime = new Promise(resolve => setTimeout(resolve, 800));
+
       try {
-        const cols = await mockDB.getColumns(currentBoard.id);
-        setColumns(cols);
-        const tasksData = await mockDB.getTasks(currentBoard.id);
-        setTasks(tasksData);
+        // Fetch data and wait for timer in parallel
+        const [cols, tasksData] = await Promise.all([
+            mockDB.getColumns(currentBoard.id),
+            mockDB.getTasks(currentBoard.id),
+            minLoadTime
+        ]);
+        
+        if (isActive) {
+          setColumns(cols);
+          setTasks(tasksData);
+        }
       } catch (e) {
         console.error("Failed to load board details", e);
       } finally {
-        // Add slight delay to prevent flicker on fast connections
-        setTimeout(() => setIsBoardLoading(false), 300);
+        if (isActive) {
+             // Turn off loading only after everything is ready
+             setIsBoardLoading(false);
+        }
       }
     };
+    
     fetchBoardDetails();
+
+    // Cleanup function
+    return () => {
+      isActive = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [currentBoard]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -188,12 +218,24 @@ const App: React.FC = () => {
     try {
         const newBoard = await mockDB.createBoard(title, background);
         setBoards(prev => [...prev, newBoard]);
-        setCurrentBoard(newBoard);
+        handleSwitchBoard(newBoard);
         showToast("Project created successfully!");
     } catch (e) {
         console.error("Failed to create board", e);
         showToast("Failed to create project", "error");
     }
+  };
+
+  // Immediate switching handler to prevent flash of old content
+  const handleSwitchBoard = (board: Board) => {
+      if (currentBoard?.id === board.id) return;
+      
+      // Start loading immediately and clear old data
+      setIsBoardLoading(true);
+      setColumns([]);
+      setTasks([]);
+      
+      setCurrentBoard(board);
   };
 
   const handleSaveBoardTitle = async () => {
@@ -228,7 +270,7 @@ const App: React.FC = () => {
           setBoards(updatedBoards);
           
           if (updatedBoards.length > 0) {
-              setCurrentBoard(updatedBoards[0]);
+              handleSwitchBoard(updatedBoards[0]);
           } else {
               setCurrentBoard(null);
           }
@@ -484,7 +526,7 @@ const App: React.FC = () => {
       <Sidebar 
         boards={boards}
         currentBoardId={currentBoard?.id || null}
-        onSelectBoard={setCurrentBoard}
+        onSelectBoard={handleSwitchBoard}
         onCreateBoard={handleCreateBoard}
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -662,13 +704,18 @@ const App: React.FC = () => {
         </nav>
 
         {/* Board Columns Area */}
-        <div className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent z-10">
+        <div 
+          className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent z-10 transition-opacity duration-300"
+          key={currentBoard?.id} // Forces reset of scroll and fresh render when board changes
+          style={{ opacity: isBoardLoading ? 0.7 : 1 }}
+        >
           <div className="h-full flex items-start gap-6 p-4 sm:p-6 min-w-max">
             
             {isBoardLoading ? (
                // Loading Skeleton
                Array.from({ length: 3 }).map((_, i) => (
-                 <div key={i} className="flex-shrink-0 w-80 flex flex-col h-full animate-fadeIn" style={{ animationDelay: `${i * 100}ms` }}>
+                 // Removed animate-fadeIn so it's instantly visible
+                 <div key={i} className="flex-shrink-0 w-80 flex flex-col h-full">
                     <div className="bg-[#ebecf0]/80 backdrop-blur-md rounded-2xl flex flex-col h-full shadow-lg border border-white/40 p-3">
                         {/* Header Skeleton */}
                         <div className="p-2 mb-2 flex items-center justify-between">
@@ -719,7 +766,7 @@ const App: React.FC = () => {
             )}
 
             {/* Add Column Section - Always Visible at End */}
-            {currentBoard && (
+            {currentBoard && !isBoardLoading && (
                 <div className="w-80 flex-shrink-0 pt-1">
                 {!isAddingColumn ? (
                     <button 
@@ -787,7 +834,6 @@ const App: React.FC = () => {
         />
         
       </div>
-
     </div>
   );
 };

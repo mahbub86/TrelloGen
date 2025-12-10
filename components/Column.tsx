@@ -95,15 +95,64 @@ const Column: React.FC<ColumnProps> = ({ column, tasks, users, onTaskDrop, onTas
       setIsMenuOpen(false);
   };
 
+  // Dynamic Styles based on Column Title
+  const getColumnStyle = (title: string) => {
+    const t = title.toLowerCase();
+    if (t.includes('todo') || t.includes('to do') || t.includes('backlog')) return { 
+        accent: 'bg-indigo-500', 
+        bgHeader: 'bg-indigo-50/50',
+        text: 'text-indigo-800', 
+        badge: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+        icon: 'fa-clipboard-list' 
+    };
+    if (t.includes('progress') || t.includes('doing')) return { 
+        accent: 'bg-amber-500', 
+        bgHeader: 'bg-amber-50/50',
+        text: 'text-amber-800', 
+        badge: 'bg-amber-100 text-amber-700 border-amber-200',
+        icon: 'fa-spinner fa-spin-pulse' 
+    };
+    if (t.includes('done') || t.includes('complete') || t.includes('finished')) return { 
+        accent: 'bg-emerald-500', 
+        bgHeader: 'bg-emerald-50/50',
+        text: 'text-emerald-800', 
+        badge: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+        icon: 'fa-check-circle' 
+    };
+    if (t.includes('review') || t.includes('test')) return { 
+        accent: 'bg-violet-500', 
+        bgHeader: 'bg-violet-50/50',
+        text: 'text-violet-800', 
+        badge: 'bg-violet-100 text-violet-700 border-violet-200',
+        icon: 'fa-glasses' 
+    };
+    
+    // Default
+    return { 
+        accent: 'bg-gray-400', 
+        bgHeader: 'bg-gray-50/50',
+        text: 'text-gray-700', 
+        badge: 'bg-gray-100 text-gray-600 border-gray-200',
+        icon: 'fa-circle' 
+    };
+  };
+
+  const style = getColumnStyle(column.title);
+
   return (
     <div 
       className="flex-shrink-0 w-80 flex flex-col max-h-full animate-fadeIn"
       style={{ animationDelay: `${column.order * 100}ms` }}
     >
       <div className={`bg-[#ebecf0]/90 backdrop-blur-xl rounded-2xl flex flex-col max-h-full shadow-lg border overflow-hidden transition-all duration-200 ${isDragOver ? 'border-blue-400 ring-2 ring-blue-200 bg-blue-50/80' : 'border-white/40'}`}>
+        
         {/* Column Header */}
-        <div className="p-4 flex justify-between items-center cursor-move group relative">
-          <div className="flex items-center gap-2 flex-1">
+        <div className={`p-4 flex justify-between items-center cursor-move group relative border-b border-gray-100 ${style.bgHeader}`}>
+          
+          {/* Top Colored Accent */}
+          <div className={`absolute top-0 left-0 w-full h-1 ${style.accent}`}></div>
+
+          <div className="flex items-center gap-2 flex-1 min-w-0">
              {isEditingTitle ? (
                  <input 
                     autoFocus
@@ -121,54 +170,66 @@ const Column: React.FC<ColumnProps> = ({ column, tasks, users, onTaskDrop, onTas
                     className="text-sm font-bold text-gray-700 bg-white border border-blue-500 rounded px-2 py-1 w-full outline-none focus:ring-2 focus:ring-blue-200"
                  />
              ) : (
-                <>
-                    <h3 
-                        onClick={() => setIsEditingTitle(true)}
-                        className="text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:bg-gray-200/50 px-2 py-1 rounded transition-colors truncate"
-                    >
+                <div 
+                    onClick={() => setIsEditingTitle(true)}
+                    className="flex items-center gap-3 cursor-pointer hover:bg-black/5 p-1 -ml-1 rounded-lg transition-colors flex-1 min-w-0"
+                >
+                    {/* Icon Badge */}
+                    <div className={`w-7 h-7 rounded-lg ${style.badge} border flex items-center justify-center text-[10px] shadow-sm flex-shrink-0`}>
+                        <i className={`fas ${style.icon}`}></i>
+                    </div>
+                    
+                    {/* Title */}
+                    <h3 className={`text-xs font-black uppercase tracking-widest truncate ${style.text}`}>
                         {column.title}
                     </h3>
-                    <span className="px-2 py-0.5 bg-gray-200 rounded-full text-xs text-gray-600 font-bold min-w-[20px] text-center">{tasks.length}</span>
-                </>
+                </div>
              )}
           </div>
           
-          <div className="relative" ref={menuRef}>
-            <button 
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="text-gray-400 hover:text-gray-700 p-1 rounded-md hover:bg-gray-200 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-            >
-                <i className="fas fa-ellipsis-h"></i>
-            </button>
-            
-            {/* Dropdown Menu */}
-            {isMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 animate-scaleIn origin-top-right overflow-hidden">
-                    <div className="py-1">
-                        <button 
-                            onClick={() => {
-                                setIsEditingTitle(true);
-                                setIsMenuOpen(false);
-                            }}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-colors flex items-center gap-2"
-                        >
-                            <i className="fas fa-pencil-alt w-4"></i> Edit Name
-                        </button>
-                        <button 
-                            onClick={handleDeleteColumnClick}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-2"
-                        >
-                            <i className="fas fa-trash-alt w-4"></i> Delete List
-                        </button>
+          <div className="flex items-center gap-2">
+            {/* Task Counter */}
+            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${style.badge}`}>
+               {tasks.length}
+            </span>
+
+            {/* Menu */}
+            <div className="relative" ref={menuRef}>
+                <button 
+                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                    className="text-gray-400 hover:text-gray-700 p-1.5 rounded-md hover:bg-white/50 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                >
+                    <i className="fas fa-ellipsis-h"></i>
+                </button>
+                
+                {isMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50 animate-scaleIn origin-top-right overflow-hidden">
+                        <div className="py-1">
+                            <button 
+                                onClick={() => {
+                                    setIsEditingTitle(true);
+                                    setIsMenuOpen(false);
+                                }}
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-colors flex items-center gap-3"
+                            >
+                                <i className="fas fa-pencil-alt w-4 text-center text-gray-400"></i> Edit Name
+                            </button>
+                            <button 
+                                onClick={handleDeleteColumnClick}
+                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-3 border-t border-gray-50"
+                            >
+                                <i className="fas fa-trash-alt w-4 text-center text-red-400"></i> Delete List
+                            </button>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
           </div>
         </div>
 
         {/* Task List (Droppable Area) */}
         <div 
-          className="flex-1 overflow-y-auto px-2 pb-2 min-h-[100px] scrollbar-thin scrollbar-thumb-gray-300"
+          className="flex-1 overflow-y-auto px-2 pb-2 min-h-[100px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent pt-3"
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDropOnColumn}
@@ -212,22 +273,22 @@ const Column: React.FC<ColumnProps> = ({ column, tasks, users, onTaskDrop, onTas
           )}
 
           {!isAdding && tasks.length === 0 && (
-             <div className="h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center text-gray-400 text-sm gap-2 m-2 pointer-events-none">
-               <i className="fas fa-ghost text-2xl opacity-50"></i>
-               <span>Drop tasks here</span>
+             <div className="h-32 border-2 border-dashed border-gray-300/50 rounded-xl flex flex-col items-center justify-center text-gray-400 text-sm gap-2 m-2 pointer-events-none">
+               <i className="fas fa-clipboard-check text-2xl opacity-20"></i>
+               <span className="opacity-50">No tasks yet</span>
              </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-3">
+        <div className="p-3 bg-gray-50/50 border-t border-gray-100/50">
           {!isAdding ? (
             <button 
               onClick={() => setIsAdding(true)}
-              className="w-full text-left p-2.5 rounded-xl hover:bg-gray-200/80 text-gray-500 hover:text-gray-800 text-sm transition-all flex items-center gap-2 group font-medium"
+              className="w-full text-left p-2.5 rounded-xl hover:bg-white text-gray-500 hover:text-blue-600 text-sm transition-all flex items-center gap-3 group font-bold shadow-sm border border-transparent hover:border-blue-100 hover:shadow-md"
             >
-              <div className="w-6 h-6 rounded-full bg-transparent group-hover:bg-gray-300 flex items-center justify-center transition-colors">
-                  <i className="fas fa-plus"></i>
+              <div className="w-6 h-6 rounded-lg bg-gray-200 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
+                  <i className="fas fa-plus text-xs"></i>
               </div>
               Add a card
             </button>
