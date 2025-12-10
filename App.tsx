@@ -1,14 +1,15 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 // Switch to API service for MySQL connection
 import { api as mockDB } from './services/api';
 import { Board, Column, Task, User } from './types';
 import ColumnComponent from './components/Column';
+import ListView from './components/ListView';
 import TaskModal from './components/TaskModal';
 import ProfileModal from './components/ProfileModal';
 import ConfirmModal from './components/ConfirmModal';
 import BoardDeleteModal from './components/BoardDeleteModal';
+import ShareModal from './components/ShareModal';
 import AuthPage from './components/AuthPage';
 import Sidebar from './components/Sidebar';
 
@@ -39,6 +40,7 @@ const App: React.FC = () => {
   
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
   // Search State
@@ -65,6 +67,7 @@ const App: React.FC = () => {
 
   // Board Deletion Modal State
   const [isDeleteBoardModalOpen, setIsDeleteBoardModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Board Title Editing State
   const [isEditingBoardTitle, setIsEditingBoardTitle] = useState(false);
@@ -197,17 +200,32 @@ const App: React.FC = () => {
       setLoading(true);
       try {
         const [boardsData, usersData] = await Promise.all([
-            mockDB.getBoards(),
+            mockDB.getBoards(user.id),
             mockDB.getUsers()
         ]);
         setBoards(boardsData);
         setAllUsers(usersData);
         
-        if (boardsData.length > 0) {
-          // Pre-set loading to avoid flash of empty board on initial load
-          setIsBoardLoading(true);
-          setCurrentBoard(boardsData[0]);
+        // Deep Linking Logic: Check for ?boardId=
+        const params = new URLSearchParams(window.location.search);
+        const linkedBoardId = params.get('boardId');
+        
+        let initialBoard = null;
+
+        if (linkedBoardId) {
+             const found = boardsData.find(b => b.id === linkedBoardId);
+             if (found) initialBoard = found;
+        } 
+        
+        if (!initialBoard && boardsData.length > 0) {
+            initialBoard = boardsData[0];
         }
+
+        if (initialBoard) {
+          setIsBoardLoading(true);
+          setCurrentBoard(initialBoard);
+        }
+
       } catch (e) {
         console.error("Failed to load initial data", e);
       } finally {
@@ -221,6 +239,13 @@ const App: React.FC = () => {
   // Fetch Board Details (Columns/Tasks) when currentBoard changes
   useEffect(() => {
     if (!currentBoard) return;
+    
+    // Update URL to include boardId for easier sharing
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('boardId') !== currentBoard.id) {
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + `?boardId=${currentBoard.id}`;
+        window.history.pushState({path: newUrl}, '', newUrl);
+    }
     
     // Setup for this board load
     let isActive = true;
@@ -285,8 +310,9 @@ const App: React.FC = () => {
   };
 
   const handleCreateBoard = async (title: string, background: string) => {
+    if (!user) return;
     try {
-        const newBoard = await mockDB.createBoard(title, background);
+        const newBoard = await mockDB.createBoard(title, background, user.id);
         setBoards(prev => [...prev, newBoard]);
         handleSwitchBoard(newBoard);
         showToast("Project created successfully!");
@@ -352,6 +378,11 @@ const App: React.FC = () => {
           showToast("Failed to delete board", "error");
       }
   };
+  
+  const handleShareBoard = async (email: string) => {
+      if (!currentBoard) return;
+      await mockDB.shareBoard(currentBoard.id, email);
+  };
 
   const handleLoginSuccess = (loggedInUser: User) => {
     setUser(loggedInUser);
@@ -364,6 +395,7 @@ const App: React.FC = () => {
     localStorage.removeItem('trellogen_user');
     setBoards([]);
     setCurrentBoard(null);
+    window.history.pushState({}, '', window.location.pathname); // Clear query params
   };
 
   const handleUpdateUser = async (updatedUser: User) => {
@@ -414,6 +446,12 @@ const App: React.FC = () => {
       console.error("Failed to sync move", e);
       showToast("Failed to sync task position", "error");
     }
+  };
+
+  const handleListMoveTask = (taskId: string, targetColumnId: string) => {
+      // Find the count of tasks in the target column to append to end
+      const targetCount = tasks.filter(t => t.columnId === targetColumnId).length;
+      handleTaskDrop(taskId, targetColumnId, targetCount);
   };
 
   const handleTaskClick = (task: Task) => {
@@ -592,6 +630,16 @@ const App: React.FC = () => {
         onConfirm={executeDeleteBoard}
       />
 
+      {/* Share Modal */}
+      {currentBoard && (
+          <ShareModal 
+            isOpen={isShareModalOpen}
+            onClose={() => setIsShareModalOpen(false)}
+            boardTitle={currentBoard.title}
+            onShare={handleShareBoard}
+          />
+      )}
+
       {/* Sidebar */}
       <Sidebar 
         boards={boards}
@@ -663,7 +711,13 @@ const App: React.FC = () => {
                         </div>
                     )}
                     
-                    <span className="px-2 py-0.5 bg-white/10 rounded text-[10px] font-medium border border-white/10 uppercase tracking-wider backdrop-blur-sm select-none">Board</span>
+                    {/* Share Button */}
+                    <button 
+                        onClick={() => setIsShareModalOpen(true)}
+                        className="flex items-center gap-1.5 bg-blue-500/80 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm border border-white/10 ml-2"
+                    >
+                        <i className="fas fa-user-plus"></i> Share
+                    </button>
                     
                     {/* Board Actions Menu */}
                     <div className="relative ml-2" ref={boardMenuRef}>
@@ -704,11 +758,30 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+             
+             {/* View Toggle */}
+             {currentBoard && (
+                 <div className="hidden sm:flex bg-white/10 p-1 rounded-lg border border-white/10 backdrop-blur-md">
+                     <button 
+                        onClick={() => setViewMode('board')}
+                        className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'board' ? 'bg-white text-blue-600 shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/5'}`}
+                     >
+                        <i className="fas fa-columns"></i> Board
+                     </button>
+                     <button 
+                        onClick={() => setViewMode('list')}
+                        className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-white/70 hover:text-white hover:bg-white/5'}`}
+                     >
+                        <i className="fas fa-list"></i> List
+                     </button>
+                 </div>
+             )}
+
              {/* Global Search */}
              <div className="relative group">
                <input 
                  type="text" 
-                 placeholder="Search all tasks..." 
+                 placeholder="Search..." 
                  value={searchQuery}
                  onChange={handleSearchChange}
                  onFocus={() => { if(searchQuery.length > 1) setShowSearchResults(true); }}
@@ -809,69 +882,83 @@ const App: React.FC = () => {
           </div>
         </nav>
 
-        {/* Board Columns Area */}
-        <div 
-          className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent z-10 transition-opacity duration-300"
-          key={currentBoard?.id} // Forces reset of scroll and fresh render when board changes
-          style={{ opacity: isBoardLoading ? 0.7 : 1 }}
-        >
-          <div className="h-full flex items-start gap-6 p-4 sm:p-6 min-w-max">
-            
-            {isBoardLoading ? (
-               // Loading Skeleton
-               Array.from({ length: 3 }).map((_, i) => (
-                 // Removed animate-fadeIn so it's instantly visible
-                 <div key={i} className="flex-shrink-0 w-80 flex flex-col h-full">
-                    <div className="bg-[#ebecf0]/80 backdrop-blur-md rounded-2xl flex flex-col h-full shadow-lg border border-white/40 p-3">
-                        {/* Header Skeleton */}
-                        <div className="p-2 mb-2 flex items-center justify-between">
-                            <div className="h-5 bg-gray-300/50 rounded w-1/2 animate-pulse"></div>
-                            <div className="h-5 w-8 bg-gray-300/50 rounded-full animate-pulse"></div>
-                        </div>
-                        {/* Cards Skeleton */}
-                        <div className="flex-1 space-y-3 p-1">
-                            {[1, 2, 3].map(k => (
-                                <div key={k} className="h-28 bg-white/60 rounded-xl shadow-sm border border-white/50 relative overflow-hidden group">
-                                     {/* Shimmer overlay */}
-                                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-shimmer" />
-                                </div>
-                            ))}
-                        </div>
+        {/* Board Content (Board or List View) */}
+        {viewMode === 'board' ? (
+             <div 
+             className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent z-10 transition-opacity duration-300"
+             key={currentBoard?.id} // Forces reset of scroll and fresh render when board changes
+             style={{ opacity: isBoardLoading ? 0.7 : 1 }}
+           >
+             <div className="h-full flex items-start gap-6 p-4 sm:p-6 min-w-max">
+               
+               {isBoardLoading ? (
+                  // Loading Skeleton
+                  Array.from({ length: 3 }).map((_, i) => (
+                    // Removed animate-fadeIn so it's instantly visible
+                    <div key={i} className="flex-shrink-0 w-80 flex flex-col h-full">
+                       <div className="bg-[#ebecf0]/80 backdrop-blur-md rounded-2xl flex flex-col h-full shadow-lg border border-white/40 p-3">
+                           {/* Header Skeleton */}
+                           <div className="p-2 mb-2 flex items-center justify-between">
+                               <div className="h-5 bg-gray-300/50 rounded w-1/2 animate-pulse"></div>
+                               <div className="h-5 w-8 bg-gray-300/50 rounded-full animate-pulse"></div>
+                           </div>
+                           {/* Cards Skeleton */}
+                           <div className="flex-1 space-y-3 p-1">
+                               {[1, 2, 3].map(k => (
+                                   <div key={k} className="h-28 bg-white/60 rounded-xl shadow-sm border border-white/50 relative overflow-hidden group">
+                                        {/* Shimmer overlay */}
+                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-shimmer" />
+                                   </div>
+                               ))}
+                           </div>
+                       </div>
                     </div>
-                 </div>
-               ))
-            ) : currentBoard ? (
-                // Actual Columns
-                columns.map(col => (
-                  <ColumnComponent
-                    key={col.id}
-                    column={col}
-                    tasks={tasks.filter(t => t.columnId === col.id)}
+                  ))
+               ) : currentBoard ? (
+                   // Actual Columns
+                   columns.map(col => (
+                     <ColumnComponent
+                       key={col.id}
+                       column={col}
+                       tasks={tasks.filter(t => t.columnId === col.id)}
+                       users={allUsers}
+                       onTaskDrop={handleTaskDrop}
+                       onTaskClick={handleTaskClick}
+                       onAddTask={handleAddTask}
+                       onDeleteTask={promptDeleteTask}
+                       onUpdateColumn={handleUpdateColumn}
+                       onDeleteColumn={handleDeleteColumn}
+                     />
+                   ))
+               ) : (
+                   <div className="flex-1 flex items-center justify-center text-white/50">
+                       <div className="text-center">
+                           <i className="fas fa-folder-open text-4xl mb-4 opacity-50"></i>
+                           <p className="text-lg">No board selected. Create one to get started.</p>
+                       </div>
+                   </div>
+               )}
+               
+               {/* Spacer to ensure the last item isn't flush with viewport edge when scrolled */}
+               <div className="w-2 flex-shrink-0 h-1"></div>
+             </div>
+           </div>
+        ) : (
+            // LIST VIEW
+            currentBoard && !isBoardLoading && (
+                <ListView 
+                    tasks={tasks}
+                    columns={columns}
                     users={allUsers}
-                    onTaskDrop={handleTaskDrop}
                     onTaskClick={handleTaskClick}
-                    onAddTask={handleAddTask}
-                    onDeleteTask={promptDeleteTask}
-                    onUpdateColumn={handleUpdateColumn}
-                    onDeleteColumn={handleDeleteColumn}
-                  />
-                ))
-            ) : (
-                <div className="flex-1 flex items-center justify-center text-white/50">
-                    <div className="text-center">
-                        <i className="fas fa-folder-open text-4xl mb-4 opacity-50"></i>
-                        <p className="text-lg">No board selected. Create one to get started.</p>
-                    </div>
-                </div>
-            )}
-            
-            {/* Spacer to ensure the last item isn't flush with viewport edge when scrolled */}
-            <div className="w-2 flex-shrink-0 h-1"></div>
-          </div>
-        </div>
+                    onUpdateTask={handleSaveTask}
+                    onMoveTask={handleListMoveTask}
+                />
+            )
+        )}
 
-        {/* Add List Floating Button */}
-        {currentBoard && !isBoardLoading && (
+        {/* Add List Floating Button (Only in Board View) */}
+        {currentBoard && !isBoardLoading && viewMode === 'board' && (
             <button 
                 onClick={() => setIsAddingColumn(true)}
                 className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-110 z-40 group animate-scaleIn"
