@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 // Switch to API service for MySQL connection
 import { api as mockDB } from './services/api';
@@ -764,54 +765,54 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
-
-            {/* Add Column Section - Always Visible at End */}
-            {currentBoard && !isBoardLoading && (
-                <div className="w-80 flex-shrink-0 pt-1">
-                {!isAddingColumn ? (
-                    <button 
-                    onClick={() => setIsAddingColumn(true)}
-                    className="w-full h-12 bg-white/10 hover:bg-white/20 rounded-xl text-white font-medium text-left px-4 flex items-center transition-all duration-200 backdrop-blur-md border border-white/10 shadow-sm hover:shadow-md group"
-                    >
-                    <span className="w-6 h-6 rounded bg-white/20 flex items-center justify-center mr-3 group-hover:bg-white/30 transition-colors">
-                        <i className="fas fa-plus text-xs"></i>
-                    </span>
-                    Add another list
-                    </button>
-                ) : (
-                    <div className="glass-card rounded-xl p-3 flex flex-col gap-2 shadow-xl animate-scaleIn">
-                    <input 
-                        autoFocus
-                        type="text"
-                        placeholder="Enter list title..."
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-800 bg-white/50 backdrop-blur-sm"
-                        value={newColumnTitle}
-                        onChange={e => setNewColumnTitle(e.target.value)}
-                        onKeyDown={e => { if(e.key === 'Enter') handleAddColumn(); }}
-                    />
-                    <div className="flex gap-2 items-center mt-1">
-                        <button 
-                            onClick={handleAddColumn}
-                            className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition shadow-md shadow-blue-500/30"
-                        >
-                            Add list
-                        </button>
-                        <button 
-                            onClick={() => { setIsAddingColumn(false); setNewColumnTitle(''); }}
-                            className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-lg transition"
-                        >
-                            <i className="fas fa-times"></i>
-                        </button>
-                    </div>
-                    </div>
-                )}
-                </div>
-            )}
             
             {/* Spacer to ensure the last item isn't flush with viewport edge when scrolled */}
             <div className="w-2 flex-shrink-0 h-1"></div>
           </div>
         </div>
+
+        {/* Add List Floating Button */}
+        {currentBoard && !isBoardLoading && (
+            <button 
+                onClick={() => setIsAddingColumn(true)}
+                className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-110 z-40 group animate-scaleIn"
+                title="Add new list"
+            >
+                <i className="fas fa-plus text-xl group-hover:rotate-90 transition-transform duration-300"></i>
+            </button>
+        )}
+
+        {/* Add List Modal */}
+        {isAddingColumn && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+                <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl animate-scaleIn m-4">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">Add New List</h3>
+                    <input 
+                        autoFocus
+                        type="text"
+                        placeholder="Enter list title..."
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 bg-gray-50 mb-4"
+                        value={newColumnTitle}
+                        onChange={e => setNewColumnTitle(e.target.value)}
+                        onKeyDown={e => { if(e.key === 'Enter') handleAddColumn(); }}
+                    />
+                    <div className="flex gap-3">
+                         <button 
+                            onClick={() => { setIsAddingColumn(false); setNewColumnTitle(''); }}
+                            className="flex-1 py-2.5 rounded-xl text-gray-500 hover:bg-gray-100 font-medium transition"
+                         >
+                            Cancel
+                         </button>
+                         <button 
+                            onClick={handleAddColumn}
+                            className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition"
+                         >
+                            Create List
+                         </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* Task Modal */}
         {selectedTask && (
