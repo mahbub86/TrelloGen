@@ -39,6 +39,32 @@ export const api = {
     return response.json();
   },
 
+  updateColumn: async (columnId: string, title: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/columns/${columnId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!response.ok) throw new Error('Failed to update column');
+  },
+
+  deleteColumn: async (columnId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/columns/${columnId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete column');
+  },
+
+  addColumn: async (title: string, boardId: string): Promise<Column> => {
+    const response = await fetch(`${API_BASE_URL}/columns`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, boardId }),
+    });
+    if (!response.ok) throw new Error('Failed to add column');
+    return response.json();
+  },
+
   getTasks: async (boardId: string): Promise<Task[]> => {
     const response = await fetch(`${API_BASE_URL}/boards/${boardId}/tasks`);
     if (!response.ok) throw new Error('Failed to fetch tasks');
@@ -77,16 +103,6 @@ export const api = {
       method: 'DELETE',
     });
     if (!response.ok) throw new Error('Failed to delete task');
-  },
-
-  addColumn: async (title: string, boardId: string): Promise<Column> => {
-    const response = await fetch(`${API_BASE_URL}/columns`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, boardId }),
-    });
-    if (!response.ok) throw new Error('Failed to add column');
-    return response.json();
   },
 
   // Auth Methods

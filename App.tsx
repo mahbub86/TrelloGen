@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+// Switch to API service for MySQL connection
 import { api as mockDB } from './services/api';
 import { Board, Column, Task, User } from './types';
 import ColumnComponent from './components/Column';
@@ -39,11 +40,25 @@ const App: React.FC = () => {
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState('');
 
+  // Safe LocalStorage Set
+  const saveSession = (userData: User) => {
+      try {
+          localStorage.setItem('trellogen_user', JSON.stringify(userData));
+      } catch (e) {
+          console.error("LocalStorage Quota Exceeded. Session might not persist.", e);
+          showToast("Warning: Image too large for local session.", "error");
+      }
+  };
+
   // Check for existing session
   useEffect(() => {
     const sessionUser = localStorage.getItem('trellogen_user');
     if (sessionUser) {
-      setUser(JSON.parse(sessionUser));
+      try {
+        setUser(JSON.parse(sessionUser));
+      } catch (e) {
+        localStorage.removeItem('trellogen_user');
+      }
     }
   }, []);
 
@@ -83,7 +98,6 @@ const App: React.FC = () => {
     setSearchQuery(''); // Clear search when switching boards
 
     const fetchBoardDetails = async () => {
-      // Small local loading state for board switch could be added here
       try {
         const cols = await mockDB.getColumns(currentBoard.id);
         setColumns(cols);
@@ -136,7 +150,7 @@ const App: React.FC = () => {
 
   const handleLoginSuccess = (loggedInUser: User) => {
     setUser(loggedInUser);
-    localStorage.setItem('trellogen_user', JSON.stringify(loggedInUser));
+    saveSession(loggedInUser);
     showToast(`Welcome back, ${loggedInUser.name}!`);
   };
 
@@ -152,7 +166,7 @@ const App: React.FC = () => {
       await mockDB.updateUser(updatedUser);
       setUser(updatedUser);
       setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-      localStorage.setItem('trellogen_user', JSON.stringify(updatedUser));
+      saveSession(updatedUser);
       showToast("Profile updated successfully!");
     } catch (e) {
       console.error("Failed to update user", e);
@@ -258,6 +272,35 @@ const App: React.FC = () => {
         console.error("Failed to add column", e);
         showToast("Failed to add list", "error");
     }
+  };
+
+  const handleUpdateColumn = async (columnId: string, title: string) => {
+      setColumns(prev => prev.map(c => c.id === columnId ? { ...c, title } : c));
+      try {
+          await mockDB.updateColumn(columnId, title);
+      } catch (e) {
+          console.error("Failed to update column", e);
+          showToast("Failed to update list title", "error");
+      }
+  };
+
+  const handleDeleteColumn = async (columnId: string) => {
+      const columnTasks = tasks.filter(t => t.columnId === columnId);
+      if (columnTasks.length > 0) {
+          showToast("Please delete all cards in this list first.", "error");
+          return;
+      }
+
+      if (!window.confirm("Are you sure you want to delete this list?")) return;
+
+      setColumns(prev => prev.filter(c => c.id !== columnId));
+      try {
+          await mockDB.deleteColumn(columnId);
+          showToast("List deleted successfully");
+      } catch (e) {
+          console.error("Failed to delete column", e);
+          showToast("Failed to delete list", "error");
+      }
   };
 
   // 1. Auth Guard
@@ -391,7 +434,7 @@ const App: React.FC = () => {
                {/* Avatar Container */}
                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr from-white/20 to-white/5 backdrop-blur-md text-white font-bold flex items-center justify-center ring-2 ring-white/20 shadow-lg transform group-hover:scale-105 transition-transform flex-shrink-0 overflow-hidden">
                  {user.avatarUrl ? (
-                   <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                   <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover object-center" />
                  ) : (
                    user.initials
                  )}
@@ -404,7 +447,7 @@ const App: React.FC = () => {
                     <div className="px-4 py-3 border-b border-gray-100/50 flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold overflow-hidden border border-white shadow-sm flex-shrink-0">
                           {user.avatarUrl ? (
-                            <img src={user.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                            <img src={user.avatarUrl} alt="Profile" className="w-full h-full object-cover object-center" />
                           ) : user.initials}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -456,6 +499,8 @@ const App: React.FC = () => {
                 onTaskClick={handleTaskClick}
                 onAddTask={handleAddTask}
                 onDeleteTask={handleDeleteTask}
+                onUpdateColumn={handleUpdateColumn}
+                onDeleteColumn={handleDeleteColumn}
               />
             ))}
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Task, Subtask, User } from '../types';
 import { geminiService } from '../services/geminiService';
@@ -178,16 +179,22 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
                   <div className="flex -space-x-2">
                     {allUsers.filter(u => editedTask.assigneeIds?.includes(u.id)).map(u => (
                       u.avatarUrl ? (
-                         <img key={u.id} src={u.avatarUrl} title={u.name} className="w-9 h-9 rounded-full border-2 border-white shadow-md object-cover" />
+                         <img 
+                          key={u.id} 
+                          src={u.avatarUrl} 
+                          alt={u.name}
+                          title={u.name} 
+                          className="w-9 h-9 rounded-full border-2 border-white shadow-md object-cover flex-shrink-0" 
+                        />
                       ) : (
-                         <div key={u.id} className="w-9 h-9 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold border-2 border-white shadow-md" title={u.name}>
+                         <div key={u.id} className="w-9 h-9 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold border-2 border-white shadow-md flex-shrink-0" title={u.name}>
                           {u.initials}
                         </div>
                       )
                     ))}
                     <button 
                       onClick={() => setIsAssigneeOpen(!isAssigneeOpen)}
-                      className="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 border-2 border-white flex items-center justify-center transition-colors shadow-sm"
+                      className="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 border-2 border-white flex items-center justify-center transition-colors shadow-sm flex-shrink-0"
                     >
                       <i className="fas fa-plus"></i>
                     </button>
@@ -208,17 +215,17 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
                                 onClick={() => handleToggleAssignee(user.id)}
                                 className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors ${isAssigned ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'}`}
                             >
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-3 min-w-0">
                                   {user.avatarUrl ? (
-                                     <img src={user.avatarUrl} className="w-6 h-6 rounded-full object-cover" />
+                                     <img src={user.avatarUrl} alt={user.name} className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
                                   ) : (
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isAssigned ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${isAssigned ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
                                       {user.initials}
                                     </div>
                                   )}
-                                  <span className="font-medium">{user.name}</span>
+                                  <span className="font-medium truncate">{user.name}</span>
                                 </div>
-                                {isAssigned && <i className="fas fa-check text-blue-600"></i>}
+                                {isAssigned && <i className="fas fa-check text-blue-600 flex-shrink-0 ml-2"></i>}
                             </button>
                           )
                         })}
@@ -314,7 +321,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
                 <div key={sub.id} className="flex items-center group p-2 hover:bg-gray-50 rounded-lg transition-colors">
                   <div 
                     onClick={() => handleSubtaskToggle(sub.id)}
-                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer ${sub.completed ? 'bg-blue-500 border-blue-500' : 'border-gray-300 bg-white'}`}
+                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer flex-shrink-0 ${sub.completed ? 'bg-blue-500 border-blue-500' : 'border-gray-300 bg-white'}`}
                   >
                       {sub.completed && <i className="fas fa-check text-white text-xs"></i>}
                   </div>
@@ -338,7 +345,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
 
               {/* Add New Subtask Input */}
               <div className="flex items-center gap-2 mt-2 p-2 group">
-                 <div className="w-5 flex justify-center">
+                 <div className="w-5 flex justify-center flex-shrink-0">
                     <i className="fas fa-plus text-gray-400 text-xs"></i>
                  </div>
                  <input

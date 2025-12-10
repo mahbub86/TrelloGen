@@ -8,12 +8,12 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 
 // ---------------------------------------------------------
-// DATABASE CONNECTION (UPDATE THESE VALUES)
+// DATABASE CONNECTION
 // ---------------------------------------------------------
 const db = mysql.createConnection({
   host: 'localhost',
-  user: 'root',       // <--- CHANGE THIS IF NEEDED
-  password: '', // <--- CHANGE THIS IF NEEDED
+  user: 'root',
+  password: '', // Ensure this matches your MySQL password
   database: 'trellogen'
 });
 
@@ -59,7 +59,6 @@ app.get('/api/boards/:id/columns', (req, res) => {
   db.query('SELECT * FROM columns WHERE board_id = ? ORDER BY col_order ASC', 
     [req.params.id], (err, results) => {
     if (err) return res.status(500).send(err);
-    // Convert snake_case to camelCase for frontend
     const formatted = results.map(c => ({
         id: c.id, boardId: c.board_id, title: c.title, order: c.col_order
     }));
@@ -70,7 +69,7 @@ app.get('/api/boards/:id/columns', (req, res) => {
 app.post('/api/columns', (req, res) => {
   const { title, boardId } = req.body;
   const id = `col-${Date.now()}`;
-  const order = 99; // Simplified: append to end
+  const order = 99; 
   db.query('INSERT INTO columns (id, board_id, title, col_order) VALUES (?, ?, ?, ?)', 
     [id, boardId, title, order], (err) => {
     if (err) return res.status(500).send(err);
@@ -92,7 +91,6 @@ app.delete('/api/columns/:id', (req, res) => {
     res.sendStatus(200);
   });
 });
-
 
 // --- Tasks ---
 app.get('/api/boards/:id/tasks', (req, res) => {
@@ -209,6 +207,7 @@ app.put('/api/users/:id', (req, res) => {
 // ---------------------------------------------------------
 // START SERVER
 // ---------------------------------------------------------
-app.listen(3001, () => {
-  console.log('🚀 Backend running at http://localhost:3001');
+const PORT = 3001;
+app.listen(PORT, () => {
+  console.log(`🚀 Backend running at http://localhost:${PORT}`);
 });

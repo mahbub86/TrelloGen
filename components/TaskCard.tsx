@@ -141,13 +141,13 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, index, users, onDragStart, on
                    src={user.avatarUrl}
                    alt={user.name}
                    title={user.name}
-                   className="w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-black/5 object-cover transform hover:scale-110 transition-transform z-0 hover:z-10"
+                   className="w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-black/5 object-cover transform hover:scale-110 transition-transform z-0 hover:z-10 flex-shrink-0"
                  />
                ) : (
                  <div 
                    key={user.id} 
                    title={user.name}
-                   className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 flex items-center justify-center text-[9px] font-bold border-2 border-white shadow-sm ring-1 ring-black/5 transform hover:scale-110 transition-transform z-0 hover:z-10"
+                   className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 flex items-center justify-center text-[9px] font-bold border-2 border-white shadow-sm ring-1 ring-black/5 transform hover:scale-110 transition-transform z-0 hover:z-10 flex-shrink-0"
                  >
                    {user.initials}
                  </div>
