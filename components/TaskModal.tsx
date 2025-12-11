@@ -1,7 +1,9 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Task, Subtask, User } from '../types';
+import { Task, Subtask, User, Attachment } from '../types';
 import { geminiService } from '../services/geminiService';
+import { api } from '../services/api'; // Use Real API for file uploads
 
 interface TaskModalProps {
   task: Task;
@@ -18,6 +20,10 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
   const [isGeneratingSub, setIsGeneratingSub] = useState(false);
   const [isAssigneeOpen, setIsAssigneeOpen] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  
+  // Attachment State
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Ref for the assignee dropdown to detect clicks outside
   const assigneeDropdownRef = useRef<HTMLDivElement>(null);
@@ -129,6 +135,37 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
     } finally {
       setIsGeneratingSub(false);
     }
+  };
+
+  // --- Attachment Logic ---
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      
+      setIsUploading(true);
+      try {
+          const newAttachment = await api.uploadAttachment(editedTask.id, file);
+          const currentAttachments = editedTask.attachments || [];
+          setEditedTask(prev => ({
+              ...prev,
+              attachments: [...currentAttachments, newAttachment]
+          }));
+      } catch (e) {
+          console.error("Upload failed", e);
+          alert("Failed to upload file.");
+      } finally {
+          setIsUploading(false);
+          // Clear input
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+  };
+
+  const getFileIcon = (fileType: string) => {
+      if (fileType.includes('image')) return 'fa-file-image text-purple-500';
+      if (fileType.includes('pdf')) return 'fa-file-pdf text-red-500';
+      if (fileType.includes('word') || fileType.includes('document')) return 'fa-file-word text-blue-500';
+      if (fileType.includes('excel') || fileType.includes('sheet') || fileType.includes('spreadsheet')) return 'fa-file-excel text-green-500';
+      return 'fa-file text-gray-500';
   };
 
   const priorityOptions: { value: 'low' | 'medium' | 'high'; label: string; colorClass: string; icon: string }[] = [
@@ -302,6 +339,66 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
               onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
               placeholder="Add a more detailed description..."
             />
+          </div>
+          
+          {/* Attachments Section */}
+          <div>
+              <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                   <i className="fas fa-paperclip mr-2"></i> Attachments
+                 </h3>
+                 <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg transition-all font-medium flex items-center gap-2"
+                 >
+                    {isUploading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-upload"></i>}
+                    Upload
+                 </button>
+                 <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    onChange={handleFileUpload} 
+                 />
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {editedTask.attachments && editedTask.attachments.map(att => (
+                      <div key={att.id} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl hover:bg-blue-50/50 hover:border-blue-200 transition-colors group">
+                          {/* Preview/Icon */}
+                          <div className="w-12 h-12 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0 text-xl overflow-hidden">
+                              {att.fileType.includes('image') ? (
+                                  <img src={att.fileUrl} alt={att.fileName} className="w-full h-full object-cover" />
+                              ) : (
+                                  <i className={`fas ${getFileIcon(att.fileType)}`}></i>
+                              )}
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-gray-700 truncate" title={att.fileName}>{att.fileName}</p>
+                              <p className="text-xs text-gray-400">{new Date(att.uploadedAt).toLocaleDateString()}</p>
+                          </div>
+                          
+                          <a 
+                              href={att.fileUrl} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                              title="Download / View"
+                          >
+                              <i className="fas fa-external-link-alt text-xs"></i>
+                          </a>
+                      </div>
+                  ))}
+                  
+                  {(!editedTask.attachments || editedTask.attachments.length === 0) && (
+                      <div className="col-span-full border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center text-gray-400 gap-2 cursor-pointer hover:border-blue-300 hover:bg-blue-50/10 transition-colors" onClick={() => fileInputRef.current?.click()}>
+                          <i className="fas fa-cloud-upload-alt text-2xl opacity-50"></i>
+                          <span className="text-sm">Click to upload files</span>
+                      </div>
+                  )}
+              </div>
           </div>
 
           {/* Subtasks Section */}

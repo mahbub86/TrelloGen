@@ -1,8 +1,10 @@
 
 
-import { Board, Column, Task, User } from '../types';
+import { Board, Column, Task, User, Attachment } from '../types';
 
-const API_BASE_URL = 'http://localhost:3001/api';
+// In production (Vite), this comes from .env file. In dev, defaults to localhost.
+// Fix: Cast import.meta to any to avoid TS error 'Property env does not exist on type ImportMeta'
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
 
 export const api = {
   getBoards: async (userId: string): Promise<Board[]> => {
@@ -131,6 +133,20 @@ export const api = {
       method: 'DELETE',
     });
     if (!response.ok) throw new Error('Failed to delete task');
+  },
+
+  // Attachment Upload
+  uploadAttachment: async (taskId: string, file: File): Promise<Attachment> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/attachments`, {
+      method: 'POST',
+      body: formData, // No Content-Type header needed, browser sets multipart
+    });
+
+    if (!response.ok) throw new Error('Failed to upload file');
+    return response.json();
   },
 
   // Auth Methods

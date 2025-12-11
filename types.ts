@@ -13,6 +13,14 @@ export interface Comment {
   author: string;
 }
 
+export interface Attachment {
+  id: string;
+  fileName: string;
+  fileType: string;
+  fileUrl: string; // URL to download/view
+  uploadedAt: number;
+}
+
 export interface Task {
   id: string;
   columnId: string;
@@ -22,6 +30,7 @@ export interface Task {
   subtasks: Subtask[];
   comments: Comment[];
   assigneeIds: string[]; // List of User IDs assigned to this task
+  attachments?: Attachment[]; // New field for files
   startDate?: number;
   dueDate?: number;
   createdAt: number;
@@ -42,6 +51,7 @@ export interface Board {
   id: string;
   title: string;
   background: string; // Hex or generic name
+  ownerId?: string;
 }
 
 export interface User {

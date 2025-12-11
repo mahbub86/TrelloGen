@@ -1,6 +1,13 @@
 import express from 'express';
 import mysql from 'mysql2';
 import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -13,13 +20,43 @@ app.use((req, res, next) => {
 });
 
 // ---------------------------------------------------------
+// FILE UPLOAD SETUP (Multer)
+// ---------------------------------------------------------
+// Ensure uploads directory exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+
+// Configure Multer storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir)
+  },
+  filename: function (req, file, cb) {
+    // Unique filename: timestamp-originalName
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname)
+  }
+});
+
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// Serve uploaded files statically so frontend can access them
+app.use('/uploads', express.static(uploadDir));
+
+
+// ---------------------------------------------------------
 // DATABASE CONNECTION
 // ---------------------------------------------------------
 const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: '', // Ensure this matches your MySQL password
-  database: 'trellogen',
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'trellogen',
   multipleStatements: true 
 });
 
@@ -47,7 +84,7 @@ db.connect(err => {
   const checkColumnSql = `
     SELECT count(*) as count 
     FROM information_schema.columns 
-    WHERE table_schema = 'trellogen' 
+    WHERE table_schema = '${process.env.DB_NAME || 'trellogen'}' 
     AND table_name = 'boards' 
     AND column_name = 'owner_id';
   `;
@@ -56,6 +93,24 @@ db.connect(err => {
       if(!err && results[0].count === 0) {
           console.log("Migrating DB: Adding owner_id to boards table...");
           db.query("ALTER TABLE boards ADD COLUMN owner_id VARCHAR(50)", (alterErr) => {
+              if(alterErr) console.error("Migration failed:", alterErr);
+              else console.log("Migration successful.");
+          });
+      }
+  });
+
+  // Auto-migration: Add attachments to tasks if missing
+  const checkAttachmentsSql = `
+    SELECT count(*) as count 
+    FROM information_schema.columns 
+    WHERE table_schema = '${process.env.DB_NAME || 'trellogen'}' 
+    AND table_name = 'tasks' 
+    AND column_name = 'attachments';
+  `;
+  db.query(checkAttachmentsSql, (err, results) => {
+      if(!err && results[0].count === 0) {
+          console.log("Migrating DB: Adding attachments to tasks table...");
+          db.query("ALTER TABLE tasks ADD COLUMN attachments JSON", (alterErr) => {
               if(alterErr) console.error("Migration failed:", alterErr);
               else console.log("Migration successful.");
           });
@@ -75,10 +130,6 @@ app.get('/api/boards', (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
   }
 
-  // Logic: Select boards where:
-  // 1. User is Owner (owner_id)
-  // 2. OR User is a Member (board_members)
-  // 3. OR User is assigned to a Task in that board (JSON_CONTAINS in tasks)
   const sql = `
     SELECT DISTINCT b.* 
     FROM boards b 
@@ -100,12 +151,10 @@ app.get('/api/boards', (req, res) => {
 app.post('/api/boards', (req, res) => {
   const { id, title, background, ownerId } = req.body;
   
-  // 1. Create Board with owner_id
   db.query('INSERT INTO boards (id, title, background, owner_id) VALUES (?, ?, ?, ?)', 
     [id, title, background, ownerId], (err) => {
     if (err) return res.status(500).send(err);
 
-    // 2. Create Default Columns
     const defaultCols = ['TO DO', 'IN PROGRESS', 'COMPLETE'];
     const values = defaultCols.map((colTitle, index) => [
       `col-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`, 
@@ -137,7 +186,6 @@ app.delete('/api/boards/:id', (req, res) => {
   });
 });
 
-// Share Board Endpoint
 app.post('/api/boards/:id/share', (req, res) => {
   const boardId = req.params.id;
   const { email } = req.body;
@@ -212,6 +260,7 @@ app.get('/api/boards/:id/tasks', (req, res) => {
         subtasks: typeof t.subtasks === 'string' ? JSON.parse(t.subtasks || '[]') : t.subtasks,
         comments: typeof t.comments === 'string' ? JSON.parse(t.comments || '[]') : t.comments,
         assigneeIds: typeof t.assignee_ids === 'string' ? JSON.parse(t.assignee_ids || '[]') : t.assignee_ids,
+        attachments: typeof t.attachments === 'string' ? JSON.parse(t.attachments || '[]') : (t.attachments || []),
         startDate: t.start_date,
         dueDate: t.due_date,
         createdAt: t.created_at
@@ -220,13 +269,11 @@ app.get('/api/boards/:id/tasks', (req, res) => {
   });
 });
 
-// Search Endpoint
 app.get('/api/search', (req, res) => {
   const { q } = req.query;
   if (!q) return res.json([]);
   
   const searchTerm = `%${q}%`;
-  // Note: For search, we might want to also filter by user permission in a real app
   const sql = `
     SELECT t.*, c.board_id, b.title as board_title 
     FROM tasks t
@@ -250,6 +297,7 @@ app.get('/api/search', (req, res) => {
         subtasks: typeof t.subtasks === 'string' ? JSON.parse(t.subtasks || '[]') : t.subtasks,
         comments: typeof t.comments === 'string' ? JSON.parse(t.comments || '[]') : t.comments,
         assigneeIds: typeof t.assignee_ids === 'string' ? JSON.parse(t.assignee_ids || '[]') : t.assignee_ids,
+        attachments: typeof t.attachments === 'string' ? JSON.parse(t.attachments || '[]') : (t.attachments || []),
         startDate: t.start_date,
         dueDate: t.due_date,
         createdAt: t.created_at
@@ -260,10 +308,10 @@ app.get('/api/search', (req, res) => {
 
 app.post('/api/tasks', (req, res) => {
   const t = req.body;
-  const sql = `INSERT INTO tasks (id, column_id, title, description, priority, subtasks, comments, assignee_ids, start_date, due_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const sql = `INSERT INTO tasks (id, column_id, title, description, priority, subtasks, comments, assignee_ids, attachments, start_date, due_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   const values = [
       t.id, t.columnId, t.title, t.description, t.priority, 
-      JSON.stringify(t.subtasks), JSON.stringify(t.comments), JSON.stringify(t.assigneeIds),
+      JSON.stringify(t.subtasks), JSON.stringify(t.comments), JSON.stringify(t.assigneeIds), JSON.stringify(t.attachments || []),
       t.startDate || null, t.dueDate || null, t.createdAt
   ];
   db.query(sql, values, (err) => {
@@ -274,10 +322,10 @@ app.post('/api/tasks', (req, res) => {
 
 app.put('/api/tasks/:id', (req, res) => {
   const t = req.body;
-  const sql = `UPDATE tasks SET title=?, description=?, priority=?, subtasks=?, assignee_ids=?, start_date=?, due_date=? WHERE id=?`;
+  const sql = `UPDATE tasks SET title=?, description=?, priority=?, subtasks=?, assignee_ids=?, attachments=?, start_date=?, due_date=? WHERE id=?`;
   const values = [
       t.title, t.description, t.priority, 
-      JSON.stringify(t.subtasks), JSON.stringify(t.assigneeIds),
+      JSON.stringify(t.subtasks), JSON.stringify(t.assigneeIds), JSON.stringify(t.attachments || []),
       t.startDate || null, t.dueDate || null, req.params.id
   ];
   db.query(sql, values, (err) => {
@@ -285,6 +333,50 @@ app.put('/api/tasks/:id', (req, res) => {
     res.sendStatus(200);
   });
 });
+
+// --- Attachments Upload ---
+app.post('/api/tasks/:id/attachments', upload.single('file'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).send('No file uploaded.');
+    }
+
+    const taskId = req.params.id;
+    // Construct the file URL (assuming server runs on same host/port logic or separate)
+    // In production, use your actual domain/subdomain
+    const protocol = req.protocol;
+    const host = req.get('host'); 
+    const fileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+
+    const newAttachment = {
+        id: `att-${Date.now()}`,
+        fileName: req.file.originalname,
+        fileType: req.file.mimetype,
+        fileUrl: fileUrl,
+        uploadedAt: Date.now()
+    };
+
+    // Update the task in DB to include this new attachment
+    // First, get current attachments
+    db.query('SELECT attachments FROM tasks WHERE id = ?', [taskId], (err, results) => {
+        if (err) return res.status(500).send(err);
+        
+        let currentAttachments = [];
+        if (results.length > 0 && results[0].attachments) {
+            currentAttachments = typeof results[0].attachments === 'string' 
+                ? JSON.parse(results[0].attachments) 
+                : results[0].attachments;
+        }
+
+        currentAttachments.push(newAttachment);
+
+        // Save back to DB
+        db.query('UPDATE tasks SET attachments = ? WHERE id = ?', [JSON.stringify(currentAttachments), taskId], (updateErr) => {
+            if (updateErr) return res.status(500).send(updateErr);
+            res.json(newAttachment);
+        });
+    });
+});
+
 
 app.post('/api/tasks/:id/reorder', (req, res) => {
   const { targetColumnId } = req.body;
@@ -355,7 +447,7 @@ app.put('/api/users/:id', (req, res) => {
 // ---------------------------------------------------------
 // START SERVER
 // ---------------------------------------------------------
-const PORT = 3001;
+const PORT = process.env.PORT || 3001; // Use cPanel assigned port
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running at http://localhost:${PORT}`);
+  console.log(`🚀 Backend running on port ${PORT}`);
 });
