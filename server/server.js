@@ -341,8 +341,6 @@ app.post('/api/tasks/:id/attachments', upload.single('file'), (req, res) => {
     }
 
     const taskId = req.params.id;
-    // Construct the file URL (assuming server runs on same host/port logic or separate)
-    // In production, use your actual domain/subdomain
     const protocol = req.protocol;
     const host = req.get('host'); 
     const fileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
@@ -355,8 +353,6 @@ app.post('/api/tasks/:id/attachments', upload.single('file'), (req, res) => {
         uploadedAt: Date.now()
     };
 
-    // Update the task in DB to include this new attachment
-    // First, get current attachments
     db.query('SELECT attachments FROM tasks WHERE id = ?', [taskId], (err, results) => {
         if (err) return res.status(500).send(err);
         
@@ -369,7 +365,6 @@ app.post('/api/tasks/:id/attachments', upload.single('file'), (req, res) => {
 
         currentAttachments.push(newAttachment);
 
-        // Save back to DB
         db.query('UPDATE tasks SET attachments = ? WHERE id = ?', [JSON.stringify(currentAttachments), taskId], (updateErr) => {
             if (updateErr) return res.status(500).send(updateErr);
             res.json(newAttachment);
@@ -377,6 +372,53 @@ app.post('/api/tasks/:id/attachments', upload.single('file'), (req, res) => {
     });
 });
 
+// --- Attachment Delete ---
+app.delete('/api/tasks/:id/attachments/:attachmentId', (req, res) => {
+    const taskId = req.params.id;
+    const attachmentId = req.params.attachmentId;
+
+    db.query('SELECT attachments FROM tasks WHERE id = ?', [taskId], (err, results) => {
+        if (err) return res.status(500).send(err);
+        if (results.length === 0) return res.status(404).send('Task not found');
+
+        let currentAttachments = [];
+        try {
+            currentAttachments = typeof results[0].attachments === 'string' 
+                ? JSON.parse(results[0].attachments) 
+                : (results[0].attachments || []);
+        } catch (e) {
+            currentAttachments = [];
+        }
+
+        const attachmentToDelete = currentAttachments.find(a => a.id === attachmentId);
+        if (!attachmentToDelete) {
+            return res.status(404).send('Attachment not found');
+        }
+
+        // Remove from array
+        const updatedAttachments = currentAttachments.filter(a => a.id !== attachmentId);
+
+        // Delete file from disk
+        try {
+            // Extract filename from URL: http://host/uploads/FILENAME
+            const urlParts = attachmentToDelete.fileUrl.split('/uploads/');
+            if (urlParts.length > 1) {
+                const diskFilename = urlParts[1];
+                const filePath = path.join(uploadDir, diskFilename);
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                }
+            }
+        } catch (e) {
+            console.error("Error deleting file from disk:", e);
+        }
+
+        db.query('UPDATE tasks SET attachments = ? WHERE id = ?', [JSON.stringify(updatedAttachments), taskId], (updateErr) => {
+            if (updateErr) return res.status(500).send(updateErr);
+            res.sendStatus(200);
+        });
+    });
+});
 
 app.post('/api/tasks/:id/reorder', (req, res) => {
   const { targetColumnId } = req.body;

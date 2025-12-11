@@ -149,6 +149,14 @@ export const api = {
     return response.json();
   },
 
+  // Attachment Delete
+  deleteAttachment: async (taskId: string, attachmentId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/attachments/${attachmentId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete attachment');
+  },
+
   // Auth Methods
   register: async (name: string, email: string, password: string): Promise<User> => {
     const response = await fetch(`${API_BASE_URL}/auth/register`, {

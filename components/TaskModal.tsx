@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Task, Subtask, User, Attachment } from '../types';
 import { geminiService } from '../services/geminiService';
@@ -157,6 +158,21 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
           setIsUploading(false);
           // Clear input
           if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+      if(!confirm("Are you sure you want to delete this attachment?")) return;
+      
+      try {
+          await api.deleteAttachment(editedTask.id, attachmentId);
+          setEditedTask(prev => ({
+              ...prev,
+              attachments: prev.attachments?.filter(a => a.id !== attachmentId)
+          }));
+      } catch (e) {
+          console.error("Failed to delete attachment", e);
+          alert("Failed to delete attachment.");
       }
   };
 
@@ -365,7 +381,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {editedTask.attachments && editedTask.attachments.map(att => (
-                      <div key={att.id} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl hover:bg-blue-50/50 hover:border-blue-200 transition-colors group">
+                      <div key={att.id} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl hover:bg-blue-50/50 hover:border-blue-200 transition-colors group relative">
                           {/* Preview/Icon */}
                           <div className="w-12 h-12 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0 text-xl overflow-hidden">
                               {att.fileType.includes('image') ? (
@@ -380,15 +396,24 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, allUsers, isOpen, onClose, 
                               <p className="text-xs text-gray-400">{new Date(att.uploadedAt).toLocaleDateString()}</p>
                           </div>
                           
-                          <a 
-                              href={att.fileUrl} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 transition-colors"
-                              title="Download / View"
-                          >
-                              <i className="fas fa-external-link-alt text-xs"></i>
-                          </a>
+                          <div className="flex gap-2">
+                              <a 
+                                  href={att.fileUrl} 
+                                  target="_blank" 
+                                  rel="noreferrer"
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                                  title="Download / View"
+                              >
+                                  <i className="fas fa-external-link-alt text-xs"></i>
+                              </a>
+                              <button 
+                                  onClick={() => handleDeleteAttachment(att.id)}
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 transition-colors"
+                                  title="Delete Attachment"
+                              >
+                                  <i className="fas fa-trash-alt text-xs"></i>
+                              </button>
+                          </div>
                       </div>
                   ))}
                   
